@@ -1,0 +1,27 @@
+[
+  {
+    "task": "Robot Manipulation",
+    "datasets": [
+      {
+        "dataset": "LIBERO",
+        "sota": {
+          "metrics": ["Success Rate"],
+          "rows": [
+            {
+              "model_name": "OpenVLA-OFT",
+              "metrics": {"Success Rate": "97.1"},
+              "paper_url": "https://arxiv.org/abs/2502.19645",
+              "code_links": [{"url": "https://github.com/moojink/openvla-oft"}]
+            },
+            {
+              "model_name": "pi0",
+              "metrics": {"Success Rate": "94.2"},
+              "paper_url": "https://arxiv.org/abs/2410.24164",
+              "code_links": []
+            }
+          ]
+        }
+      }
+    ]
+  }
+]
