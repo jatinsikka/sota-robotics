@@ -8,6 +8,12 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.strip().lower()).strip("-")
 
 
+def _metric_key(text: str) -> str:
+    """Metric keys use underscores to match the DB metric convention
+    (e.g. 'success_rate', 'average_recall'), unlike hyphenated entity slugs."""
+    return re.sub(r"[^a-z0-9]+", "_", text.strip().lower()).strip("_")
+
+
 def _to_float(raw: str | None) -> float | None:
     if raw is None:
         return None
@@ -28,7 +34,7 @@ def parse_evaluation_tables(data: list[dict[str, Any]]) -> list[ResultClaim]:
             bench_slug = _slug(ds["dataset"])
             sota = ds.get("sota") or {}
             metric_names = sota.get("metrics") or ["score"]
-            primary_metric = _slug(metric_names[0])
+            primary_metric = _metric_key(metric_names[0])
             for row in sota.get("rows", []):
                 metrics = row.get("metrics", {})
                 raw_val = metrics.get(metric_names[0]) if metric_names else None
