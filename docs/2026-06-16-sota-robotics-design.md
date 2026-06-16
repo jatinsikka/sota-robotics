@@ -151,3 +151,149 @@ owned. Not the scraper.
 - Confirm "Navigation / VLN" is the intended 8th domain (was inferred from
   "Veevon").
 - Exact source list + scrape cadence for ingest v1.
+
+---
+
+## 11. Grounded Research Findings (2026-06-16)
+
+Source: a 20-agent research workflow (7/8 domains researched + adversarially
+verified at `overall_confidence: high`; data-sources, prior-art, tech-stack
+agents complete). Two agents (sim2real-rl scout, auto-synthesis, critic) hit a
+session API limit and did not run — synthesis done by hand from the rest. Full
+raw output archived in the task transcript. **These findings change the design;
+the changes are flagged below.**
+
+### 11.1 Competitive reality — the wedge narrowed
+
+The space is more crowded and better-resourced than the spec assumed:
+
+- **AllenAI `vla-evaluation-harness` (vla-eval)** — the serious competitor. It
+  *executes* VLA models (1,885 models × 18 sim benchmarks, ~657 published
+  results), public leaderboard, AI-maintained, monthly cadence, ICRA-2026
+  published, open-source + Docker repro. **It owns the "execution-verified
+  manipulation SOTA" position** — which was our obvious differentiator.
+  **Decision: do NOT compete here.** Ingest/cite their results as our
+  manipulation-sim feed; spend our effort on what they ignore.
+- **CodeSOTA** — live, weekly, has a dedicated robotics page + `/api/sota`, has
+  ingested the PWC archive. But robotics is one tab of an all-AI registry;
+  depth is thin and partly *qualitative* ("~70%", "80%+"). Study its API +
+  signed-hash verification pattern; don't depend on a rival's live API.
+- **HF Trending Papers / Emergent Mind / alphaXiv** — discovery/social feeds,
+  zero SOTA leaderboards, zero robotics specialization. The biggest void PWC
+  left (per-task quantitative SOTA) is still unfilled by these.
+- **awesome-robotics lists** — breadth, taxonomy, links; no metrics, no
+  freshness. Good cold-start seed only.
+
+**Sharpened wedge (replaces §9's "execution + synthesis"):** a *robotics-native,
+full-embodiment* SOTA tracker — manipulation + dexterous + **humanoid
+whole-body + legged locomotion + real-robot deployment + navigation/VLN** —
+unifying **sim AND real** results in one taxonomy, plus a **weekly trend-synthesis
+layer** ("what's SOTA on X right now, what changed this month, why"). AllenAI is
+manipulation-sim-only; no one covers the other embodiments or does synthesis.
+**Uncomfortable truth:** out-executing AI2 on manipulation numbers is a losing
+game. Our moat is breadth + real-robot + synthesis + UX, not execution.
+
+### 11.2 Data reality — leaderboards are saturated, gamed, and PDF-only
+
+- **LIBERO is saturated** (SOTA >97–98%); high scores reflect memorization, not
+  generalization. `LIBERO-Plus` / `LIBERO-PRO` exist specifically to expose
+  this. **Implication:** a naive "highest number wins" leaderboard is useless
+  and misleading. We must surface *discriminating* benchmarks (RoboCasa ~50–57%,
+  SimplerEnv), robustness/generalization, and `eval_conditions`.
+- **RoboArena** — distributed, double-blind, cross-lab *real-world* Elo ranking
+  (>8,500 human judgments), built to defeat gamed sim leaderboards. Runs through
+  Dec 2026. This is the credible real-world signal and a flagship data source.
+- **Vendor-internal benchmarks** (pi-0.5, Gemini Robotics, GR00T) report on
+  proprietary, non-reproducible evals. The tracker MUST tag results as
+  `public-reproducible` vs `vendor-claimed-internal`.
+- **No machine-readable cross-benchmark feed exists** since PWC died. Results are
+  fragmented, self-reported, often PDF-only. **This validates the agent
+  thesis:** LLM extraction from PDFs is not optional — there is no clean API to
+  scrape. Budget PDF table-extraction as a first-class pipeline.
+
+### 11.3 Reuse strategy — seed, don't fork
+
+- **PWC archive** (`huggingface.co/pwc-archive`, frozen Sep 2025, CC-BY-SA 4.0):
+  pull as one-time cold-start corpus for paper/method/dataset index + the
+  paper↔code linkage table; **adopt its `sota-extractor` JSON schema + loaders
+  as our ingestion format.** Treat its robotics numbers as stale placeholders,
+  NOT ground truth (predates the 2025–26 VLA wave). *CC-BY-SA share-alike means
+  a derived public dataset must stay open — fine now, a constraint if we ever
+  want a closed proprietary dataset.*
+- **4 awesome-lists** (Awesome-Embodied-AI, awesome-embodied-vla-va-vln,
+  awesome-physical-ai, Awesome-Embodied-Robotics-and-Agent): scrape for the
+  embodiment taxonomy + initial paper/model/repo corpus.
+- **AllenAI vla-eval**: ingest/cite as the manipulation-sim results feed.
+- **CodeSOTA**: study as design reference only.
+
+### 11.4 Data sources — ingest priority (validated)
+
+- **Phase 0 (one-time backfill):** PWC archive → Open-X-Embodiment metadata.
+- **Phase 1 (live spine, poll daily):** arXiv API (cs.RO + cross-lists; the
+  primary `arxiv_id` key generator + discovery firehose) → HF Hub API
+  (models/datasets; downloads/likes = cleanest adoption signal) → GitHub GraphQL
+  API (star-velocity/releases on a curated watchlist).
+- **Phase 2 (enrichment):** HF Daily Papers (upvote re-ranking) → Semantic
+  Scholar (citation signal; free key, 500/batch).
+- **Phase 3 (ground-truth numbers, highest value/effort):** per-benchmark
+  scrapers + LLM PDF table-extraction — BOP first (real online eval server/API),
+  then LIBERO/-PRO, ManiSkill3, HumanoidBench, Habitat, RoboArena.
+- **Deprioritize:** OpenAlex live API (metered since Feb 2026; use bulk snapshot
+  if needed).
+
+### 11.5 Stack — concrete decisions (validated)
+
+- **DB:** Supabase Postgres, *normalized relational graph* (not triple-store /
+  JSONB blob). Tables: `domains, tasks, benchmarks, methods, papers, code`, and
+  the load-bearing `results` join. `results` columns: FKs +
+  `metric` text, `metric_value` **numeric** (so leaderboards sort in SQL),
+  `eval_conditions` **JSONB + GIN** (split/protocol/sim_vs_real/hardware —
+  per-benchmark variance), `source_url`, `result_date`, `confidence` numeric,
+  `verification_status` enum(`pending|published|held|refuted`), `skeptic_notes`,
+  `ingested_run_id`. Partial index `WHERE verification_status='published'`.
+  **RLS on every table** (off by default — #1 security footgun; run
+  `get_advisors` after migrations); service-role key for the Python writer,
+  publishable key with read-only-published policy for Next.js. UNIQUE on
+  `(method_id, benchmark_id, hash(eval_conditions))` for idempotent re-runs.
+- **Ingest runtime:** **GitHub Actions scheduled cron** (`0 6 * * *` daily), NOT
+  Vercel (Hobby 60s / Pro 300s function caps would blow up a multi-paper Claude
+  run; Actions = 6h timeout, native Python, free minutes, secrets). Connect via
+  pooled string (port 6543). Vercel (Hobby) hosts the Next.js site only.
+- **Agent pipeline:** two Claude calls/paper — extractor → skeptic, both
+  **Opus 4.8** in v1 while founder calibrates prompts; later cost lever = drop
+  EXTRACTOR to Sonnet 4.6, keep SKEPTIC on Opus (skeptic is the trust gate).
+  Use `output_config.format` (JSON schema) — NOT assistant prefill (400s on
+  4.8); `thinking:{type:'adaptive'}`; `json.loads` parsing; check
+  `stop_reason=='refusal'`. DB is queried by code, not Claude — "Best for task
+  X" = parameterized SELECT over published rows, fed to Claude only for the
+  final synthesis prose.
+- **Cost:** Message Batches API (flat 50% off; ingest is latency-insensitive) +
+  prompt-cache the large stable prefix (system + schema + few-shot + taxonomy).
+  Don't bank on per-paper PDF caching across the extractor→skeptic boundary
+  inside batch (5-min TTL won't survive batch queue latency). Est. **~$35–65/mo**
+  at v1 scale (150–300 candidate papers/mo), dominated by Claude inference;
+  Supabase free + Vercel Hobby = $0.
+
+### 11.6 Spec deltas (what changed vs §1–10)
+
+1. **§9 moat rewritten** → breadth + real-robot + synthesis, NOT
+   execution-verified manipulation (AllenAI owns that).
+2. **New design requirement:** every result tagged `public-reproducible` vs
+   `vendor-internal`, and `sim` vs `real`. Leaderboards must not rank by raw
+   number alone (saturation/gaming) — surface eval_conditions + robustness +
+   RoboArena Elo for real-world.
+3. **New v1 work:** Phase-0 backfill (PWC archive + awesome-lists) as cold start;
+   ingest AllenAI vla-eval as the manipulation feed.
+4. **Confirmed:** automated ingest + write-time skeptic gate is the right call —
+   the data being PDF-only/self-reported makes LLM extraction mandatory.
+
+### 11.7 Remaining gaps (honest)
+
+- **Domain #5 (sim-to-real & RL)** scout didn't run (session limit). Heavily
+  overlaps locomotion + manipulation findings, but needs its own pass before
+  populating that domain.
+- Auto-synthesis + completeness-critic agents didn't run; this section is a
+  hand synthesis. A critic pass (riskiest assumptions, missing research) is
+  still owed before coding — re-run after the API limit resets (9:20pm).
+- License path decision (CC-BY-SA share-alike) if a closed dataset is ever
+  wanted.
