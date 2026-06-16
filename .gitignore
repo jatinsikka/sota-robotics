@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.local
+*.egg-info/
+
+# Next.js / build
+.next/
+out/
+dist/
+build/
+
+# Vercel
+.vercel
+
+# Secrets / keys
+*.key
+secrets/
+.env*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Data dumps / scratch
+*.log
+scratch/
+data/raw/
