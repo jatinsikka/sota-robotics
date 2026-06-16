@@ -1,9 +1,14 @@
 # Robotics SOTA Tracker — Design Spec
 
 **Date:** 2026-06-16
-**Status:** Design approved, pending spec review
+**Status:** Design approved + research-grounded (§11). Implementation plan next.
 **Codename:** `sota-robotics` (brand name TBD — originality check pending)
 **Venture:** #24
+**v1 framing (locked 2026-06-16):** a PhD/personal SOTA tool, public-by-default.
+First user = the founder; built around what a working roboticist needs
+(cross-embodiment + real-robot + weekly synthesis), not around out-executing
+AllenAI on manipulation numbers. Public-product upside preserved in the unfilled
+cross-embodiment niche.
 
 ---
 
