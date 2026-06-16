@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **STATUS (2026-06-16):** Tasks 0–4 (Python core) **DONE & merged to `main`** — 13 tests passing (commits `a4ef192`..`0dc8b99`). Tasks 5–7 (Supabase schema/RLS/seed migrations) **PENDING** — blocked only on provisioning a Supabase project; migration SQL is written and ready below. Resume by creating a project, putting its URL/keys in `.env`, then running Tasks 5–7 via the Supabase MCP.
+
 **Goal:** Stand up the Supabase Postgres backbone (schema, RLS, indexes, seed taxonomy) and a tested Python data layer (typed models, PWC `sota-extractor` loader, deterministic `eval_conditions` hashing, idempotent upsert) that every later subsystem writes through.
 
 **Architecture:** A normalized relational graph in Supabase Postgres — `domains, tasks, benchmarks, methods, papers, code` plus the load-bearing `results` join. Per-benchmark variance lives in a JSONB `eval_conditions` column (GIN-indexed); `metric_value` stays a real numeric column so leaderboards sort in SQL. A Python package (`ingest/`) holds Pydantic models mirroring the schema and pure, unit-tested functions for parsing/hashing/upserting. Migrations are applied via the Supabase MCP tools; the pure-function core is TDD'd with pytest and needs no live DB.
