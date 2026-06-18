@@ -53,9 +53,9 @@ def run_upserts(
 class _SotaWriterAdapter:
     """Adapt the Plan 2 `SotaWriter` to the `_Writer` Protocol the spine uses.
 
-    Plan 2 ships `SotaWriter(client)` with natural-key resolvers
+    Plan 2 ships `SotaWriter(conn)` with natural-key resolvers
     (`resolve_paper(PaperRec) -> int`, `resolve_code(repo_url, license) -> int`)
-    backed by a service-role Supabase client, NOT a DSN-based `Database` with
+    backed by a psycopg connection (DATABASE_URL), NOT a `Database` with
     `upsert_paper`/`upsert_code`. This thin shim maps the spine's expected
     method names onto the real writer so `run_upserts` works unchanged.
     """

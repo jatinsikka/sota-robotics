@@ -1,4 +1,5 @@
 # tests/conftest.py
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -13,142 +14,144 @@ def fixtures_dir() -> Path:
     return FIXTURES
 
 
-class _FakeQuery:
-    """Mimics the chainable supabase-py PostgREST query builder.
+# --- Fake psycopg connection/cursor -------------------------------------------
+# Stand-in for psycopg.Connection. db.py drives it via:
+#     with conn.cursor() as cur:
+#         cur.execute(sql, params)
+#         row = cur.fetchone()
+#     conn.commit()
+# The fake parses only the SQL shapes db.py emits:
+#   * select id from <table> where <col> = %s limit 1
+#   * insert into <table> (<cols>) values (...) on conflict (<key>)
+#       do nothing returning id
+#   * insert into results (...) values (...) on conflict (...) do update set ...
+# It keeps an in-memory store keyed by table, assigns incrementing ids on
+# insert, and honours the unique/natural keys so idempotency is exercised.
 
-    Only the slice of the API our db.py uses is implemented:
-      .select(cols).eq(col, val).limit(n).execute()      -> reads
-      .insert(row).execute()                              -> single insert
-      .upsert(rows, on_conflict=...).execute()            -> idempotent upsert
-    Every terminal .execute() returns an object with a `.data` list,
-    mirroring supabase-py's APIResponse.
-    """
+_SELECT_RE = re.compile(
+    r"select\s+id\s+from\s+(\w+)\s+where\s+(\w+)\s*=\s*%s", re.IGNORECASE
+)
+_INSERT_RE = re.compile(
+    r"insert\s+into\s+(\w+)\s*\(([^)]*)\)\s*values", re.IGNORECASE
+)
+_ON_CONFLICT_RE = re.compile(
+    r"on\s+conflict\s*\(([^)]*)\)\s*(do\s+nothing|do\s+update)", re.IGNORECASE
+)
 
-    def __init__(self, table: "_FakeTable"):
-        self._table = table
-        self._op = None
-        self._payload = None
-        self._on_conflict = None
-        self._filters: list[tuple[str, object]] = []
 
-    def select(self, *_cols):
-        self._op = "select"
+def _unwrap(value: Any) -> Any:
+    """Unwrap a psycopg Jsonb-like adapter back to its dict for comparisons."""
+    obj = getattr(value, "obj", None)
+    if obj is not None and isinstance(obj, (dict, list)):
+        return obj
+    return value
+
+
+class _FakeCursor:
+    def __init__(self, store: "_FakeStore"):
+        self._store = store
+        self._result: tuple | None = None
+
+    def __enter__(self) -> "_FakeCursor":
         return self
 
-    def eq(self, col, val):
-        self._filters.append((col, val))
-        return self
+    def __exit__(self, *exc: object) -> None:
+        return None
 
-    def limit(self, _n):
-        return self
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
+        params = tuple(_unwrap(p) for p in (params or ()))
+        self._store.calls.append({"sql": " ".join(sql.split()), "params": params})
 
-    def insert(self, row):
-        self._op = "insert"
-        self._payload = row
-        return self
+        sel = _SELECT_RE.search(sql)
+        ins = _INSERT_RE.search(sql)
+        if ins:
+            self._result = self._store.do_insert(sql, ins, params)
+        elif sel:
+            self._result = self._store.do_select(sel.group(1), sel.group(2), params[0])
+        else:
+            self._result = None
 
-    def upsert(self, rows, on_conflict=None):
-        self._op = "upsert"
-        self._payload = rows
-        self._on_conflict = on_conflict
-        return self
-
-    def execute(self):
-        self._table.calls.append(
-            {
-                "table": self._table.name,
-                "op": self._op,
-                "payload": self._payload,
-                "on_conflict": self._on_conflict,
-                "filters": self._filters,
-            }
-        )
-        if self._op == "select":
-            data = self._table.select_handler(self._table.name, self._filters)
-            return _FakeResponse(data)
-        if self._op in ("insert", "upsert"):
-            data = self._table.write_handler(
-                self._table.name, self._op, self._payload, self._on_conflict
-            )
-            return _FakeResponse(data)
-        return _FakeResponse([])
+    def fetchone(self) -> tuple | None:
+        return self._result
 
 
-class _FakeResponse:
-    def __init__(self, data):
-        self.data = data
-
-
-class _FakeTable:
-    def __init__(self, name, calls, select_handler, write_handler):
-        self.name = name
-        self.calls = calls
-        self.select_handler = select_handler
-        self.write_handler = write_handler
-
-    def select(self, *cols):
-        return _FakeQuery(self).select(*cols)
-
-    def insert(self, row):
-        return _FakeQuery(self).insert(row)
-
-    def upsert(self, rows, on_conflict=None):
-        return _FakeQuery(self).upsert(rows, on_conflict=on_conflict)
-
-
-class FakeSupabase:
-    """Stand-in for supabase.Client.
-
-    `seed` pre-populates existing rows keyed by (table, slug-or-natural-key);
-    selects look up there, writes assign incrementing ids and remember rows.
-    """
+class _FakeStore:
+    """In-memory tables behind the fake connection."""
 
     def __init__(self, seed: dict | None = None):
         self.calls: list[dict] = []
-        self._store: dict[str, list[dict]] = {}
+        self._rows: dict[str, list[dict]] = {}
         self._next_id = 1
         for (table, _key), row in (seed or {}).items():
-            self._store.setdefault(table, []).append(row)
+            self._rows.setdefault(table, []).append(dict(row))
             self._next_id = max(self._next_id, int(row.get("id", 0)) + 1)
 
-    def table(self, name):
-        return _FakeTable(name, self.calls, self._select, self._write)
+    # -- helpers --
+    def rows(self, table: str) -> list[dict]:
+        return self._rows.setdefault(table, [])
 
-    def _select(self, table, filters):
-        rows = self._store.get(table, [])
-        out = []
-        for r in rows:
-            if all(r.get(c) == v for c, v in filters):
-                out.append(r)
-        return out
+    def do_select(self, table: str, col: str, val: Any) -> tuple | None:
+        for r in self.rows(table):
+            if r.get(col) == val:
+                return (r["id"],)
+        return None
 
-    def _write(self, table, op, payload, on_conflict):
-        rows = payload if isinstance(payload, list) else [payload]
-        written = []
-        bucket = self._store.setdefault(table, [])
-        for row in rows:
-            existing = None
-            if op == "upsert" and on_conflict:
-                keys = [k.strip() for k in on_conflict.split(",")]
-                for r in bucket:
-                    if all(r.get(k) == row.get(k) for k in keys):
-                        existing = r
-                        break
+    def do_insert(self, sql: str, ins: "re.Match", params: tuple) -> tuple | None:
+        table = ins.group(1)
+        cols = [c.strip() for c in ins.group(2).split(",")]
+        row = dict(zip(cols, params))
+        conflict = _ON_CONFLICT_RE.search(sql)
+        if conflict:
+            keys = [k.strip() for k in conflict.group(1).split(",")]
+            action = conflict.group(2).lower().replace(" ", "")
+            existing = self._find_by_keys(table, keys, row)
             if existing is not None:
-                existing.update(row)
-                written.append(existing)
-            else:
-                new = dict(row)
-                new.setdefault("id", self._next_id)
-                self._next_id += 1
-                bucket.append(new)
-                written.append(new)
-        return written
+                if action == "doupdate":
+                    existing.update(row)
+                    return None  # results upsert has no RETURNING
+                # do nothing -> no row returned; caller re-SELECTs.
+                return None
+        new = dict(row)
+        new["id"] = self._next_id
+        self._next_id += 1
+        self.rows(table).append(new)
+        returning = re.search(r"returning\s+id", sql, re.IGNORECASE)
+        return (new["id"],) if returning else None
+
+    def _find_by_keys(self, table: str, keys: list[str], row: dict) -> dict | None:
+        for r in self.rows(table):
+            if all(r.get(k) == row.get(k) for k in keys):
+                return r
+        return None
+
+
+class FakePsycopg:
+    """Stand-in for a psycopg connection. `seed` pre-populates existing rows
+    keyed by (table, natural-key); inserts assign incrementing ids."""
+
+    def __init__(self, seed: dict | None = None):
+        self._store = _FakeStore(seed)
+        self.committed = 0
+
+    def cursor(self) -> _FakeCursor:
+        return _FakeCursor(self._store)
+
+    def commit(self) -> None:
+        self.committed += 1
+
+    # Exposed for test assertions (mirror old FakeSupabase surface).
+    @property
+    def calls(self) -> list[dict]:
+        return self._store.calls
+
+    @property
+    def _store_rows(self) -> dict[str, list[dict]]:
+        return self._store._rows
 
 
 @pytest.fixture
-def fake_supabase():
-    return FakeSupabase
+def fake_db():
+    return FakePsycopg
 
 
 # --- Fake Anthropic client + canned-response helpers (agent pipeline, Plan 4) ---

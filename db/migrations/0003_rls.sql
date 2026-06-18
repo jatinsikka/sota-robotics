@@ -1,24 +1,17 @@
--- 0003_rls.sql
-alter table domains    enable row level security;
-alter table tasks      enable row level security;
-alter table benchmarks enable row level security;
-alter table methods    enable row level security;
-alter table papers     enable row level security;
-alter table code       enable row level security;
-alter table results    enable row level security;
-
--- Reference tables: world-readable (no secrets in taxonomy/paper metadata).
-create policy "public read domains"    on domains    for select using (true);
-create policy "public read tasks"      on tasks      for select using (true);
-create policy "public read benchmarks" on benchmarks for select using (true);
-create policy "public read methods"    on methods    for select using (true);
-create policy "public read papers"     on papers     for select using (true);
-create policy "public read code"       on code       for select using (true);
-
--- results: only PUBLISHED rows are visible to anon/publishable key.
-create policy "public read published results"
-  on results for select
-  using (verification_status = 'published');
-
--- No insert/update/delete policies => only the service-role key (which
--- bypasses RLS) can write. The publishable key is read-only by construction.
+-- 0003_rls.sql — (intentionally empty)
+--
+-- Row Level Security is intentionally NOT used in this project.
+--
+-- Why: the web app reads the database SERVER-SIDE ONLY (Next.js App Router
+-- server components / route handlers) using a single DATABASE_URL credential
+-- that is never exposed to the browser. There is no anonymous/publishable
+-- client key reaching end users, so there is no untrusted role to constrain
+-- with RLS.
+--
+-- Access control instead comes from the QUERIES themselves: every results
+-- query hardcodes `where verification_status = 'published'`, so unpublished
+-- (pending/held/refuted) rows never leave the server. Reference tables
+-- (domains/tasks/benchmarks/methods/papers/code) hold no secrets.
+--
+-- This file is kept (rather than deleted) so migration numbering stays stable.
+-- The migration runner tolerates an effectively-empty SQL file and skips it.

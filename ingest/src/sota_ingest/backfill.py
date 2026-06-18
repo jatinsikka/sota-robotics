@@ -6,7 +6,7 @@ Run:  python -m sota_ingest.backfill            (both feeds)
 
 I/O is injected (fetch_json/fetch_text, writer) so the orchestration logic is
 unit-tested with everything mocked. main() wires the real httpx fetchers and
-the service-role Supabase writer.
+the psycopg-backed writer (DATABASE_URL).
 """
 import argparse
 import uuid

@@ -1,32 +1,35 @@
-"""Service-role Supabase writer for Phase-0 backfill.
+"""Service-role Postgres writer for Phase-0 backfill.
 
 The ONLY module that writes to Postgres. Reference rows (methods/benchmarks/
 papers/code) are resolved-or-created by natural key; results are upserted on
 the Plan 1 UNIQUE constraint so re-runs are idempotent.
 
-Auth: service-role client from SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
-(RLS allows writes only to the service role; the publishable key is read-only).
-Tests inject a fake client implementing the same chainable .table(...) API.
+Backend: psycopg (v3). `client_from_env()` returns a psycopg Connection from
+`DATABASE_URL` (Neon pooled connection string). There is no Supabase RLS:
+the web app reads server-side and filters `verification_status='published'`
+in its queries, and this writer holds the only credentials with write access.
+
+Tests inject a fake connection implementing the same `.cursor()` context-
+manager API (`execute` / `fetchone`).
 """
 import os
 import re
 from typing import Any
 
-from supabase import Client, create_client
+import psycopg
 
 from sota_ingest.models import PaperRec, ResultClaim
 from sota_ingest.upsert import CONFLICT_TARGET, build_result_row
 
-# Postgres on_conflict string must match Plan 1's CONFLICT_TARGET exactly.
+# Postgres ON CONFLICT target columns must match Plan 1's CONFLICT_TARGET exactly.
 CONFLICT_ON = ",".join(CONFLICT_TARGET)
 
 
-def client_from_env() -> Client:
-    """Build the service-role client. Never run in the test suite (would
-    require real creds); used by backfill.py at runtime only."""
-    url = os.environ["SUPABASE_URL"]
-    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    return create_client(url, key)
+def client_from_env() -> "psycopg.Connection":
+    """Open a psycopg connection from DATABASE_URL (Neon pooled string). Never
+    run in the test suite (would require a real DB); used at runtime only."""
+    dsn = os.environ["DATABASE_URL"]
+    return psycopg.connect(dsn)
 
 
 def _slugify(text: str) -> str:
@@ -34,70 +37,120 @@ def _slugify(text: str) -> str:
 
 
 class SotaWriter:
-    """Resolve/create reference rows and upsert results via a Supabase client."""
+    """Resolve/create reference rows and upsert results via a psycopg connection.
 
-    def __init__(self, client: Any):
-        self.client = client
+    `conn` is any object exposing psycopg's `.cursor()` context-manager API:
+    `with conn.cursor() as cur: cur.execute(sql, params); cur.fetchone()`.
+    Writes are committed after each operation so callers don't have to.
+    """
 
-    # --- generic helpers ---------------------------------------------------
+    def __init__(self, conn: Any):
+        self.conn = conn
 
-    def _find_id(self, table: str, col: str, val: Any) -> int | None:
-        resp = self.client.table(table).select("id").eq(col, val).limit(1).execute()
-        rows = resp.data or []
-        return int(rows[0]["id"]) if rows else None
+    # --- low-level execution helper ---------------------------------------
 
-    def _insert_returning_id(self, table: str, row: dict[str, Any]) -> int:
-        resp = self.client.table(table).insert(row).execute()
-        rows = resp.data or []
-        if not rows:
-            raise RuntimeError(f"insert into {table} returned no row: {row!r}")
-        return int(rows[0]["id"])
+    def _execute_returning(self, sql: str, params: tuple[Any, ...]) -> tuple | None:
+        with self.conn.cursor() as cur:
+            cur.execute(sql, params)
+            row = cur.fetchone()
+        self._commit()
+        return row
+
+    def _commit(self) -> None:
+        commit = getattr(self.conn, "commit", None)
+        if callable(commit):
+            commit()
 
     # --- reference resolvers (natural-key, idempotent) ---------------------
 
     def resolve_method(self, slug: str, name: str | None = None, org: str | None = None) -> int:
         slug = _slugify(slug)
-        existing = self._find_id("methods", "slug", slug)
-        if existing is not None:
-            return existing
-        return self._insert_returning_id("methods", {"slug": slug, "name": name or slug, "org": org})
+        # INSERT or, on slug collision, no-op then return the existing id via the
+        # RETURNING-or-SELECT pattern. ON CONFLICT DO NOTHING returns no row, so
+        # fall back to a SELECT.
+        row = self._execute_returning(
+            "insert into methods (slug, name, org) values (%s, %s, %s) "
+            "on conflict (slug) do nothing returning id",
+            (slug, name or slug, org),
+        )
+        if row is not None:
+            return int(row[0])
+        existing = self._execute_returning(
+            "select id from methods where slug = %s limit 1", (slug,)
+        )
+        return int(existing[0])
 
     def resolve_benchmark(self, slug: str, domain_slug: str | None = None, name: str | None = None) -> int:
         slug = _slugify(slug)
-        existing = self._find_id("benchmarks", "slug", slug)
-        if existing is not None:
-            return existing
-        domain_id = self._find_id("domains", "slug", domain_slug) if domain_slug else None
-        return self._insert_returning_id(
-            "benchmarks", {"slug": slug, "name": name or slug, "domain_id": domain_id}
+        domain_id = None
+        if domain_slug:
+            drow = self._execute_returning(
+                "select id from domains where slug = %s limit 1", (domain_slug,)
+            )
+            domain_id = int(drow[0]) if drow else None
+        row = self._execute_returning(
+            "insert into benchmarks (slug, name, domain_id) values (%s, %s, %s) "
+            "on conflict (slug) do nothing returning id",
+            (slug, name or slug, domain_id),
         )
+        if row is not None:
+            return int(row[0])
+        existing = self._execute_returning(
+            "select id from benchmarks where slug = %s limit 1", (slug,)
+        )
+        return int(existing[0])
 
     def resolve_paper(self, paper: PaperRec) -> int:
         if paper.arxiv_id:
-            existing = self._find_id("papers", "arxiv_id", paper.arxiv_id)
-            if existing is not None:
-                return existing
+            existing = self._execute_returning(
+                "select id from papers where arxiv_id = %s limit 1", (paper.arxiv_id,)
+            )
         else:
-            existing = self._find_id("papers", "title", paper.title)
-            if existing is not None:
-                return existing
-        return self._insert_returning_id(
-            "papers",
-            {
-                "arxiv_id": paper.arxiv_id,
-                "title": paper.title,
-                "authors": paper.authors,
-                "abstract": paper.abstract,
-                "published_date": paper.published_date,
-                "url": paper.url,
-            },
+            existing = self._execute_returning(
+                "select id from papers where title = %s limit 1", (paper.title,)
+            )
+        if existing is not None:
+            return int(existing[0])
+        # arxiv_id is UNIQUE; title is not, so only the arxiv path can use
+        # ON CONFLICT. For the title-only path we already SELECTed above.
+        row = self._execute_returning(
+            "insert into papers (arxiv_id, title, authors, abstract, published_date, url) "
+            "values (%s, %s, %s, %s, %s, %s) "
+            "on conflict (arxiv_id) do nothing returning id",
+            (
+                paper.arxiv_id,
+                paper.title,
+                paper.authors,
+                paper.abstract,
+                paper.published_date,
+                paper.url,
+            ),
         )
+        if row is not None:
+            return int(row[0])
+        # Lost a race on arxiv_id (or DO NOTHING fired): re-select.
+        existing = self._execute_returning(
+            "select id from papers where arxiv_id = %s limit 1", (paper.arxiv_id,)
+        )
+        return int(existing[0])
 
     def resolve_code(self, repo_url: str, license: str | None = None) -> int:
-        existing = self._find_id("code", "repo_url", repo_url)
+        existing = self._execute_returning(
+            "select id from code where repo_url = %s limit 1", (repo_url,)
+        )
         if existing is not None:
-            return existing
-        return self._insert_returning_id("code", {"repo_url": repo_url, "license": license})
+            return int(existing[0])
+        row = self._execute_returning(
+            "insert into code (repo_url, license) values (%s, %s) "
+            "on conflict (repo_url) do nothing returning id",
+            (repo_url, license),
+        )
+        if row is not None:
+            return int(row[0])
+        existing = self._execute_returning(
+            "select id from code where repo_url = %s limit 1", (repo_url,)
+        )
+        return int(existing[0])
 
     # --- results upsert (idempotent via Plan 1 constraint) -----------------
 
@@ -112,4 +165,28 @@ class SotaWriter:
         run_id: str,
     ) -> None:
         row = build_result_row(claim, method_id, benchmark_id, task_id, paper_id, code_id, run_id)
-        self.client.table("results").upsert([row], on_conflict=CONFLICT_ON).execute()
+        cols = list(row.keys())
+        placeholders = ", ".join(["%s"] * len(cols))
+        col_list = ", ".join(cols)
+        # On the Plan 1 unique key, refresh every non-key column so a re-run with
+        # updated verification/skeptic fields overwrites in place (idempotent).
+        update_cols = [c for c in cols if c not in CONFLICT_TARGET]
+        set_clause = ", ".join(f"{c} = excluded.{c}" for c in update_cols)
+        sql = (
+            f"insert into results ({col_list}) values ({placeholders}) "
+            f"on conflict ({CONFLICT_ON}) do update set {set_clause}"
+        )
+        params = tuple(_adapt(row[c]) for c in cols)
+        with self.conn.cursor() as cur:
+            cur.execute(sql, params)
+        self._commit()
+
+
+def _adapt(value: Any) -> Any:
+    """Adapt Python values for psycopg parameters. dict -> psycopg Jsonb so the
+    JSONB `eval_conditions` column round-trips correctly."""
+    if isinstance(value, dict):
+        from psycopg.types.json import Jsonb
+
+        return Jsonb(value)
+    return value

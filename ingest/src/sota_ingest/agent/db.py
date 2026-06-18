@@ -1,7 +1,7 @@
 """DB writer for gated claims. Resolves slugs->ids and builds upsert rows via
 Plan 1's build_result_row + CONFLICT_TARGET. The pure row-assembly seam
 (build_upsert_rows) is unit-tested; the live upsert (upsert_results) executes
-those rows through a Supabase client/executor supplied by the cron entrypoint.
+those rows through a psycopg-backed executor supplied by the cron entrypoint.
 
 A method may be new (not yet in `methods`); resolving/creating method ids is
 the caller's job (it owns the DB connection) — build_upsert_rows takes the
@@ -51,7 +51,7 @@ def build_upsert_rows(
 
 def upsert_results(execute: Callable[[list[dict[str, Any]]], None], rows: list[dict[str, Any]]) -> int:
     """Execute the upsert. `execute` is supplied by the cron entrypoint and wraps
-    a Supabase service-role upsert with on_conflict=CONFLICT_TARGET (idempotent).
+    a psycopg upsert with ON CONFLICT (CONFLICT_TARGET) DO UPDATE (idempotent).
     Returns the number of rows submitted."""
     if not rows:
         return 0
@@ -59,5 +59,5 @@ def upsert_results(execute: Callable[[list[dict[str, Any]]], None], rows: list[d
     return len(rows)
 
 
-# Surfaced so the cron entrypoint configures the Supabase upsert with the right key.
+# Surfaced so the cron entrypoint configures the psycopg upsert with the right key.
 ON_CONFLICT = ",".join(CONFLICT_TARGET)
