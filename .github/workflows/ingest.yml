@@ -1,0 +1,42 @@
+name: ingest
+
+on:
+  schedule:
+    # Daily at 06:00 UTC — the discovery firehose.
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  spine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ingest
+    env:
+      PYTHONPATH: src
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      GITHUB_TOKEN: ${{ secrets.INGEST_GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run discovery spine
+        run: uv run python -m sota_ingest.spine
