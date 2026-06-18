@@ -1,0 +1,59 @@
+[
+  {
+    "task": "Robot Manipulation",
+    "datasets": [
+      {
+        "dataset": "LIBERO",
+        "sota": {
+          "metrics": ["Success Rate"],
+          "rows": [
+            {
+              "model_name": "OpenVLA-OFT",
+              "metrics": {"Success Rate": "97.1"},
+              "paper_url": "https://arxiv.org/abs/2502.19645",
+              "code_links": [{"url": "https://github.com/moojink/openvla-oft"}]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "task": "Visual Question Answering",
+    "datasets": [
+      {
+        "dataset": "VQAv2",
+        "sota": {
+          "metrics": ["Accuracy"],
+          "rows": [
+            {
+              "model_name": "PaLI",
+              "metrics": {"Accuracy": "84.3"},
+              "paper_url": "https://arxiv.org/abs/2209.06794",
+              "code_links": []
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "task": "Visual Navigation",
+    "datasets": [
+      {
+        "dataset": "Habitat ObjectNav",
+        "sota": {
+          "metrics": ["SPL"],
+          "rows": [
+            {
+              "model_name": "OVRL-V2",
+              "metrics": {"SPL": "0.29"},
+              "paper_url": "https://arxiv.org/abs/2204.13226",
+              "code_links": []
+            }
+          ]
+        }
+      }
+    ]
+  }
+]
