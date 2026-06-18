@@ -34,3 +34,65 @@ describe("formatMetricValue", () => {
     expect(formatMetricValue("success_rate", null)).toBe("—");
   });
 });
+
+import { rankResults } from "@/lib/format";
+import type { ResultRow } from "@/lib/types";
+
+function row(partial: Partial<ResultRow>): ResultRow {
+  return {
+    id: 1,
+    method_id: 1,
+    benchmark_id: 1,
+    task_id: null,
+    paper_id: null,
+    code_id: null,
+    metric: "success_rate",
+    metric_value: 0.5,
+    eval_conditions: {},
+    eval_conditions_hash: "hash",
+    realm: "sim",
+    origin: "public_reproducible",
+    source_url: "https://example.com",
+    result_date: null,
+    confidence: null,
+    verification_status: "published",
+    skeptic_notes: null,
+    method_slug: "m",
+    method_name: "M",
+    ...partial,
+  };
+}
+
+describe("rankResults", () => {
+  it("sorts by metric_value descending", () => {
+    const ranked = rankResults([
+      row({ id: 1, metric_value: 0.7 }),
+      row({ id: 2, metric_value: 0.9 }),
+      row({ id: 3, metric_value: 0.8 }),
+    ]);
+    expect(ranked.map((r) => r.id)).toEqual([2, 3, 1]);
+  });
+
+  it("places null metric_value rows last", () => {
+    const ranked = rankResults([
+      row({ id: 1, metric_value: null }),
+      row({ id: 2, metric_value: 0.4 }),
+    ]);
+    expect(ranked.map((r) => r.id)).toEqual([2, 1]);
+  });
+
+  it("keeps two rows for the same method when eval_conditions_hash differs", () => {
+    const ranked = rankResults([
+      row({ id: 1, method_id: 7, metric_value: 0.9, eval_conditions_hash: "a" }),
+      row({ id: 2, method_id: 7, metric_value: 0.6, eval_conditions_hash: "b" }),
+    ]);
+    expect(ranked).toHaveLength(2);
+    expect(ranked.map((r) => r.eval_conditions_hash)).toEqual(["a", "b"]);
+  });
+
+  it("does not mutate the input array", () => {
+    const input = [row({ id: 1, metric_value: 0.1 }), row({ id: 2, metric_value: 0.9 })];
+    rankResults(input);
+    expect(input.map((r) => r.id)).toEqual([1, 2]);
+  });
+});

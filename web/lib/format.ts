@@ -20,3 +20,20 @@ export function formatMetricValue(metric: string, value: number | null): string 
   const pct = value <= 1 ? value * 100 : value;
   return `${pct.toFixed(1)}%`;
 }
+
+import type { ResultRow } from "@/lib/types";
+
+/**
+ * Returns rows in display order: descending by metric_value, nulls last.
+ * Crucially this does NOT dedupe by method — rows that share a method but differ
+ * in eval_conditions_hash are both kept, so the table can surface conditions per
+ * row rather than crowning one "winner". Pure: never mutates the input.
+ */
+export function rankResults(rows: ResultRow[]): ResultRow[] {
+  return [...rows].sort((a, b) => {
+    if (a.metric_value === null && b.metric_value === null) return 0;
+    if (a.metric_value === null) return 1;
+    if (b.metric_value === null) return -1;
+    return b.metric_value - a.metric_value;
+  });
+}
