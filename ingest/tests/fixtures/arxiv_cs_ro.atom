@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <title>ArXiv Query: search_query=cat:cs.RO</title>
+  <opensearch:totalResults xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">2</opensearch:totalResults>
+  <entry>
+    <id>http://arxiv.org/abs/2506.01234v1</id>
+    <updated>2026-06-17T09:00:00Z</updated>
+    <published>2026-06-17T09:00:00Z</published>
+    <title>Cross-Embodiment Skill Transfer for Humanoid Manipulation</title>
+    <summary>  We present a method for transferring manipulation skills across
+embodiments using a shared latent action space.  </summary>
+    <author><name>Ada Lovelace</name></author>
+    <author><name>Alan Turing</name></author>
+    <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="cs.RO"/>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <link href="http://arxiv.org/abs/2506.01234v1" rel="alternate" type="text/html"/>
+    <link title="pdf" href="http://arxiv.org/pdf/2506.01234v1" rel="related" type="application/pdf"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2506.05678v2</id>
+    <updated>2026-06-16T12:30:00Z</updated>
+    <published>2026-06-15T12:30:00Z</published>
+    <title>Real-World Robot Evaluation
+With RoboArena</title>
+    <summary>An Elo-based protocol for real-world robot policy evaluation.</summary>
+    <author><name>Grace Hopper</name></author>
+    <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="cs.AI"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <link href="http://arxiv.org/abs/2506.05678v2" rel="alternate" type="text/html"/>
+  </entry>
+</feed>
