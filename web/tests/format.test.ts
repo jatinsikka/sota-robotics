@@ -96,3 +96,29 @@ describe("rankResults", () => {
     expect(input.map((r) => r.id)).toEqual([1, 2]);
   });
 });
+
+import { realmLabel, originLabel, formatResultDate } from "@/lib/format";
+
+describe("realmLabel", () => {
+  it("maps sim and real to display labels", () => {
+    expect(realmLabel("sim")).toBe("Sim");
+    expect(realmLabel("real")).toBe("Real");
+  });
+});
+
+describe("originLabel", () => {
+  it("maps origin enums to display labels", () => {
+    expect(originLabel("public_reproducible")).toBe("Public · reproducible");
+    expect(originLabel("vendor_internal")).toBe("Vendor · internal");
+  });
+});
+
+describe("formatResultDate", () => {
+  it("returns the date string unchanged when present", () => {
+    expect(formatResultDate("2026-05-01")).toBe("2026-05-01");
+  });
+
+  it("returns em dash for null", () => {
+    expect(formatResultDate(null)).toBe("—");
+  });
+});

@@ -37,3 +37,19 @@ export function rankResults(rows: ResultRow[]): ResultRow[] {
     return b.metric_value - a.metric_value;
   });
 }
+
+import type { Realm, Origin } from "@/lib/types";
+
+export function realmLabel(realm: Realm): string {
+  return realm === "sim" ? "Sim" : "Real";
+}
+
+export function originLabel(origin: Origin): string {
+  return origin === "public_reproducible"
+    ? "Public · reproducible"
+    : "Vendor · internal";
+}
+
+export function formatResultDate(date: string | null): string {
+  return date ?? "—";
+}
