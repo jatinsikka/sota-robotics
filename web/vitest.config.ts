@@ -7,6 +7,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
   },
+  esbuild: {
+    jsx: "automatic",
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./", import.meta.url)),
