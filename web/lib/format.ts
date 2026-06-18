@@ -53,3 +53,45 @@ export function originLabel(origin: Origin): string {
 export function formatResultDate(date: string | null): string {
   return date ?? "—";
 }
+
+export interface SynthesisPrompt {
+  system: string;
+  user: string;
+}
+
+/**
+ * Builds the Claude prompt for "best for task X" synthesis. Pure and tested.
+ * The system prompt encodes the spec-locked rule: never crown a bare winner by
+ * raw metric_value — weigh eval_conditions, realm (sim vs real), origin
+ * (public_reproducible vs vendor_internal), and saturation.
+ */
+export function buildSynthesisPrompt(taskName: string, rows: ResultRow[]): SynthesisPrompt {
+  const system = [
+    "You are a skeptical robotics-evaluation analyst.",
+    "You are given published, verified benchmark results for one task.",
+    "Write ONE short paragraph (3-5 sentences) recommending what currently works best for this task.",
+    "NEVER recommend a method on raw metric_value alone. You MUST weigh eval_conditions, realm (sim results are far weaker evidence than real), and origin (vendor_internal numbers are self-reported and less trustworthy than public_reproducible).",
+    "Cite each method you mention by its exact name. Flag when the top number is sim-only or vendor-internal. If the evidence is thin or conflicting, say so plainly. Do not invent numbers beyond those provided.",
+  ].join(" ");
+
+  if (rows.length === 0) {
+    return {
+      system,
+      user: `Task: ${taskName}\n\nNo published results are available for this task. Say that no recommendation can be made yet.`,
+    };
+  }
+
+  const lines = rows.map(
+    (r) =>
+      `- ${r.method_name}: ${r.metric}=${r.metric_value ?? "n/a"} | realm=${r.realm} | origin=${r.origin} | conditions=${JSON.stringify(r.eval_conditions)} | source=${r.source_url}`,
+  );
+
+  const user = [
+    `Task: ${taskName}`,
+    "",
+    "Published results:",
+    ...lines,
+  ].join("\n");
+
+  return { system, user };
+}

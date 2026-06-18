@@ -122,3 +122,36 @@ describe("formatResultDate", () => {
     expect(formatResultDate(null)).toBe("—");
   });
 });
+
+import { buildSynthesisPrompt } from "@/lib/format";
+
+describe("buildSynthesisPrompt", () => {
+  const rows = [
+    row({ id: 1, method_name: "Pi0", metric: "success_rate", metric_value: 0.82, realm: "real", origin: "vendor_internal", eval_conditions: { episodes: 50 } }),
+    row({ id: 2, method_name: "OpenVLA", metric: "success_rate", metric_value: 0.71, realm: "sim", origin: "public_reproducible", eval_conditions: {} }),
+  ];
+
+  it("includes the task name in the user content", () => {
+    const { user } = buildSynthesisPrompt("Pick-and-place", rows);
+    expect(user).toContain("Pick-and-place");
+  });
+
+  it("includes each method, its value, realm, and origin in the user content", () => {
+    const { user } = buildSynthesisPrompt("Pick-and-place", rows);
+    expect(user).toContain("Pi0");
+    expect(user).toContain("OpenVLA");
+    expect(user).toContain("real");
+    expect(user).toContain("vendor_internal");
+  });
+
+  it("system prompt forbids ranking by raw value alone", () => {
+    const { system } = buildSynthesisPrompt("Pick-and-place", rows);
+    expect(system.toLowerCase()).toContain("never");
+    expect(system.toLowerCase()).toContain("eval_conditions");
+  });
+
+  it("handles an empty row set without throwing", () => {
+    const { user } = buildSynthesisPrompt("Pick-and-place", []);
+    expect(user).toContain("No published results");
+  });
+});
