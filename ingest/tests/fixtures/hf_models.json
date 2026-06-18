@@ -1,0 +1,29 @@
+[
+  {
+    "id": "physical-intelligence/pi0",
+    "author": "physical-intelligence",
+    "downloads": 18342,
+    "likes": 540,
+    "pipeline_tag": "robotics",
+    "tags": ["robotics", "vla", "pytorch"],
+    "lastModified": "2026-06-14T22:10:05.000Z"
+  },
+  {
+    "id": "lerobot/aloha_static_coffee",
+    "author": "lerobot",
+    "downloads": 2210,
+    "likes": 88,
+    "pipeline_tag": "robotics",
+    "tags": ["robotics", "dataset"],
+    "lastModified": "2026-06-10T08:00:00.000Z"
+  },
+  {
+    "id": "someuser/unrelated-llm",
+    "author": "someuser",
+    "downloads": 999999,
+    "likes": 12000,
+    "pipeline_tag": "text-generation",
+    "tags": ["llm"],
+    "lastModified": "2026-06-01T00:00:00.000Z"
+  }
+]
