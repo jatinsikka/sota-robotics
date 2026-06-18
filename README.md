@@ -50,5 +50,5 @@ check.
 
 ## Stack
 
-Next.js on Vercel · Supabase Postgres · Python ingest pipeline · Claude as
+Next.js on Vercel · Neon serverless Postgres · Python ingest pipeline · Claude as
 extractor + skeptic.

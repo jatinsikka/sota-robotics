@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { createServerClient } from "@/lib/supabase/server";
+import { getSql } from "@/lib/db";
 import { fetchTaskResults } from "@/lib/queries";
 import { buildSynthesisPrompt } from "@/lib/format";
 
@@ -18,8 +18,7 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "taskSlug is required" }, { status: 400 });
   }
 
-  const supabase = createServerClient();
-  const result = await fetchTaskResults(supabase, taskSlug);
+  const result = await fetchTaskResults(getSql(), taskSlug);
   if (!result) {
     return Response.json({ error: "task not found" }, { status: 404 });
   }

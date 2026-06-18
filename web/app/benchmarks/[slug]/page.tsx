@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { createServerClient } from "@/lib/supabase/server";
+import { getSql } from "@/lib/db";
 import { fetchBenchmarkWithResults } from "@/lib/queries";
 import { SaturationBanner } from "@/components/SaturationBanner";
 import { LeaderboardTable } from "@/components/LeaderboardTable";
@@ -13,8 +13,7 @@ export default async function BenchmarkPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const supabase = createServerClient();
-  const data = await fetchBenchmarkWithResults(supabase, slug);
+  const data = await fetchBenchmarkWithResults(getSql(), slug);
   if (!data) notFound();
 
   const { benchmark, rows } = data;

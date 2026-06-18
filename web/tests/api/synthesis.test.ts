@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock the server supabase client factory and the queries module.
+// Mock the server Postgres client factory and the queries module.
 const fakeRows = [
   {
     id: 1,
@@ -25,8 +25,8 @@ const fakeRows = [
   },
 ];
 
-vi.mock("@/lib/supabase/server", () => ({
-  createServerClient: vi.fn(() => ({})),
+vi.mock("@/lib/db", () => ({
+  getSql: vi.fn(() => ({})),
 }));
 
 vi.mock("@/lib/queries", async (importOriginal) => {

@@ -8,8 +8,7 @@ Set these in the Vercel project (Settings → Environment Variables) and locally
 
 | Var | Scope | Notes |
 | --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | client + server | Project URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | client + server | Publishable key — RLS restricts reads to reference tables + `verification_status='published'` results. Safe to expose. |
+| `DATABASE_URL` | server only | Neon pooled Postgres connection string. The app reads the DB **server-side only** (App Router server components / route handlers). NEVER prefix with `NEXT_PUBLIC_`. There is no RLS — access control comes from queries hardcoding `verification_status='published'`. |
 | `ANTHROPIC_API_KEY` | server only | Used only in `app/api/synthesis/route.ts`. NEVER prefix with `NEXT_PUBLIC_`. |
 
 ## Local dev

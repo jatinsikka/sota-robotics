@@ -1,127 +1,131 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Sql } from "postgres";
 import type { ResultRow, Benchmark, Domain, Task, Method } from "@/lib/types";
 
-const RESULT_SELECT =
-  "id, method_id, benchmark_id, task_id, paper_id, code_id, metric, metric_value, eval_conditions, eval_conditions_hash, realm, origin, source_url, result_date, confidence, verification_status, skeptic_notes, methods!inner(slug, name)";
-
-const BENCHMARK_SELECT = "id, domain_id, slug, name, metric, is_saturated";
-
-function shapeRow(raw: Record<string, unknown>): ResultRow {
-  const method = raw.methods as { slug: string; name: string };
-  return {
-    ...(raw as unknown as ResultRow),
-    method_slug: method.slug,
-    method_name: method.name,
-  };
-}
-
-export async function listBenchmarksByDomain(
-  supabase: SupabaseClient,
-  domainId: number,
-): Promise<Benchmark[]> {
-  const { data, error } = await supabase
-    .from("benchmarks")
-    .select(BENCHMARK_SELECT)
-    .eq("domain_id", domainId)
-    .order("name");
-  if (error) throw error;
-  return (data as Benchmark[]) ?? [];
-}
+// Server-side read layer over Neon Postgres. There is NO row-level security:
+// every results query below hardcodes `verification_status = 'published'`, so
+// pending/held/refuted rows never leave the server. Reference tables hold no
+// secrets and are read in full.
 
 export interface DomainWithBenchmarks extends Domain {
   benchmarks: Benchmark[];
 }
 
+export async function listBenchmarksByDomain(
+  sql: Sql,
+  domainId: number,
+): Promise<Benchmark[]> {
+  const rows = await sql<Benchmark[]>`
+    select id, domain_id, slug, name, metric, is_saturated
+    from benchmarks
+    where domain_id = ${domainId}
+    order by name
+  `;
+  return rows as unknown as Benchmark[];
+}
+
 export async function listDomainsWithBenchmarks(
-  supabase: SupabaseClient,
+  sql: Sql,
 ): Promise<DomainWithBenchmarks[]> {
-  const { data, error } = await supabase
-    .from("domains")
-    .select("id, slug, name")
-    .order("name");
-  if (error) throw error;
-  const domains = (data as Domain[]) ?? [];
+  const domains = await sql<Domain[]>`
+    select id, slug, name
+    from domains
+    order by name
+  `;
 
   const out: DomainWithBenchmarks[] = [];
   for (const d of domains) {
-    const benchmarks = await listBenchmarksByDomain(supabase, d.id);
+    const benchmarks = await listBenchmarksByDomain(sql, d.id);
     out.push({ ...d, benchmarks });
   }
   return out;
 }
 
 export async function fetchBenchmarkWithResults(
-  supabase: SupabaseClient,
+  sql: Sql,
   benchmarkSlug: string,
 ): Promise<{ benchmark: Benchmark; rows: ResultRow[] } | null> {
-  const { data: benchmark, error: bErr } = await supabase
-    .from("benchmarks")
-    .select(BENCHMARK_SELECT)
-    .eq("slug", benchmarkSlug)
-    .maybeSingle();
-  if (bErr) throw bErr;
+  const benchmarks = await sql<Benchmark[]>`
+    select id, domain_id, slug, name, metric, is_saturated
+    from benchmarks
+    where slug = ${benchmarkSlug}
+    limit 1
+  `;
+  const benchmark = benchmarks[0];
   if (!benchmark) return null;
 
-  const { data, error } = await supabase
-    .from("results")
-    .select(RESULT_SELECT)
-    .eq("benchmark_id", (benchmark as Benchmark).id)
-    .order("metric_value", { ascending: false });
-  if (error) throw error;
+  const rows = await sql<ResultRow[]>`
+    select
+      r.id, r.method_id, r.benchmark_id, r.task_id, r.paper_id, r.code_id,
+      r.metric, r.metric_value, r.eval_conditions, r.eval_conditions_hash,
+      r.realm, r.origin, r.source_url, r.result_date, r.confidence,
+      r.verification_status, r.skeptic_notes,
+      m.slug as method_slug, m.name as method_name
+    from results r
+    join methods m on m.id = r.method_id
+    where r.benchmark_id = ${benchmark.id}
+      and r.verification_status = 'published'
+    order by r.metric_value desc nulls last
+  `;
 
-  return {
-    benchmark: benchmark as Benchmark,
-    rows: ((data as Record<string, unknown>[]) ?? []).map(shapeRow),
-  };
+  return { benchmark, rows: rows as unknown as ResultRow[] };
 }
 
 export async function fetchTaskResults(
-  supabase: SupabaseClient,
+  sql: Sql,
   taskSlug: string,
 ): Promise<{ task: Task; rows: ResultRow[] } | null> {
-  const { data: task, error: taskErr } = await supabase
-    .from("tasks")
-    .select("id, domain_id, slug, name")
-    .eq("slug", taskSlug)
-    .maybeSingle();
-  if (taskErr) throw taskErr;
+  const tasks = await sql<Task[]>`
+    select id, domain_id, slug, name
+    from tasks
+    where slug = ${taskSlug}
+    limit 1
+  `;
+  const task = tasks[0];
   if (!task) return null;
 
-  const { data, error } = await supabase
-    .from("results")
-    .select(RESULT_SELECT)
-    .eq("task_id", (task as Task).id);
-  if (error) throw error;
+  const rows = await sql<ResultRow[]>`
+    select
+      r.id, r.method_id, r.benchmark_id, r.task_id, r.paper_id, r.code_id,
+      r.metric, r.metric_value, r.eval_conditions, r.eval_conditions_hash,
+      r.realm, r.origin, r.source_url, r.result_date, r.confidence,
+      r.verification_status, r.skeptic_notes,
+      m.slug as method_slug, m.name as method_name
+    from results r
+    join methods m on m.id = r.method_id
+    where r.task_id = ${task.id}
+      and r.verification_status = 'published'
+  `;
 
-  return {
-    task: task as Task,
-    rows: ((data as Record<string, unknown>[]) ?? []).map(shapeRow),
-  };
+  return { task, rows: rows as unknown as ResultRow[] };
 }
 
 export async function fetchMethodResults(
-  supabase: SupabaseClient,
+  sql: Sql,
   methodSlug: string,
 ): Promise<{ method: Method; rows: ResultRow[] } | null> {
-  const { data: method, error: mErr } = await supabase
-    .from("methods")
-    .select("id, slug, name")
-    .eq("slug", methodSlug)
-    .maybeSingle();
-  if (mErr) throw mErr;
+  const methods = await sql<Method[]>`
+    select id, slug, name
+    from methods
+    where slug = ${methodSlug}
+    limit 1
+  `;
+  const method = methods[0];
   if (!method) return null;
 
-  const { data, error } = await supabase
-    .from("results")
-    .select(RESULT_SELECT)
-    .eq("method_id", (method as Method).id);
-  if (error) throw error;
+  const rows = await sql<ResultRow[]>`
+    select
+      r.id, r.method_id, r.benchmark_id, r.task_id, r.paper_id, r.code_id,
+      r.metric, r.metric_value, r.eval_conditions, r.eval_conditions_hash,
+      r.realm, r.origin, r.source_url, r.result_date, r.confidence,
+      r.verification_status, r.skeptic_notes,
+      m.slug as method_slug, m.name as method_name
+    from results r
+    join methods m on m.id = r.method_id
+    where r.method_id = ${method.id}
+      and r.verification_status = 'published'
+  `;
 
-  return {
-    method: method as Method,
-    rows: ((data as Record<string, unknown>[]) ?? []).map(shapeRow),
-  };
+  return { method, rows: rows as unknown as ResultRow[] };
 }
 
-export { RESULT_SELECT, BENCHMARK_SELECT, shapeRow };
 export type { ResultRow, Benchmark, Domain, Task, Method };

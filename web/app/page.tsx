@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { createServerClient } from "@/lib/supabase/server";
+import { getSql } from "@/lib/db";
 import { listDomainsWithBenchmarks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const supabase = createServerClient();
-  const domains = await listDomainsWithBenchmarks(supabase);
+  const domains = await listDomainsWithBenchmarks(getSql());
 
   return (
     <>

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { createServerClient } from "@/lib/supabase/server";
+import { getSql } from "@/lib/db";
 import { fetchTaskResults } from "@/lib/queries";
 import { LeaderboardTable } from "@/components/LeaderboardTable";
 import { SynthesisPanel } from "@/components/SynthesisPanel";
@@ -13,8 +13,7 @@ export default async function TaskPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const supabase = createServerClient();
-  const data = await fetchTaskResults(supabase, slug);
+  const data = await fetchTaskResults(getSql(), slug);
   if (!data) notFound();
 
   const { task, rows } = data;
