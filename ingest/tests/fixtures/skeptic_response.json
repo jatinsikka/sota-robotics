@@ -1,0 +1,16 @@
+{
+  "verdicts": [
+    {
+      "claim_index": 0,
+      "publishable": true,
+      "confidence": 0.82,
+      "skeptic_notes": "Test split, 50 episodes, standard LIBERO-LONG protocol; saturated bench but conditions are explicit."
+    },
+    {
+      "claim_index": 1,
+      "publishable": false,
+      "confidence": 0.2,
+      "skeptic_notes": "Vendor-internal eval with undisclosed protocol; not reproducible."
+    }
+  ]
+}

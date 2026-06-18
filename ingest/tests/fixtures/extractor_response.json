@@ -1,0 +1,28 @@
+{
+  "claims": [
+    {
+      "method_slug": "openvla-oft",
+      "benchmark_slug": "libero",
+      "task_slug": "libero-long",
+      "metric": "success_rate",
+      "metric_value": 97.1,
+      "eval_conditions": {"suite": "LIBERO-LONG", "split": "test", "episodes": 50, "protocol": "rollout"},
+      "realm": "sim",
+      "origin": "public_reproducible",
+      "source_url": "https://arxiv.org/abs/2502.19645",
+      "result_date": "2025-02-27"
+    },
+    {
+      "method_slug": "vendorbot-x",
+      "benchmark_slug": "internal-pick",
+      "task_slug": null,
+      "metric": "success_rate",
+      "metric_value": 99.0,
+      "eval_conditions": {"note": "internal benchmark, protocol undisclosed"},
+      "realm": "real",
+      "origin": "vendor_internal",
+      "source_url": "https://example.com/vendorbot",
+      "result_date": null
+    }
+  ]
+}

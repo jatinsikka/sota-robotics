@@ -1,5 +1,7 @@
 # tests/conftest.py
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -147,3 +149,59 @@ class FakeSupabase:
 @pytest.fixture
 def fake_supabase():
     return FakeSupabase
+
+
+# --- Fake Anthropic client + canned-response helpers (agent pipeline, Plan 4) ---
+# Never hits the network: returns canned structured-output payloads and records
+# the kwargs each create() call received, so tests can assert on stop_reason
+# handling, no-prefill, the cached system prefix, and the model id.
+
+
+def _message(text: str, stop_reason: str = "end_turn") -> SimpleNamespace:
+    """Mimic an anthropic Message: .content is a list of blocks, each with
+    .type and .text; .stop_reason mirrors the API field."""
+    block = SimpleNamespace(type="text", text=text)
+    return SimpleNamespace(content=[block], stop_reason=stop_reason, stop_details=None)
+
+
+class FakeMessages:
+    def __init__(self, response_text: str, stop_reason: str):
+        self._response_text = response_text
+        self._stop_reason = stop_reason
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> SimpleNamespace:
+        self.calls.append(kwargs)
+        return _message(self._response_text, self._stop_reason)
+
+
+class FakeAnthropic:
+    """Drop-in stand-in for anthropic.Anthropic. Records every create() call's
+    kwargs and returns a canned structured-output message."""
+
+    def __init__(self, response_text: str, stop_reason: str = "end_turn"):
+        self.messages = FakeMessages(response_text, stop_reason)
+
+    @property
+    def calls(self) -> list[dict[str, Any]]:
+        return self.messages.calls
+
+
+@pytest.fixture
+def extractor_payload() -> str:
+    return (FIXTURES / "extractor_response.json").read_text()
+
+
+@pytest.fixture
+def skeptic_payload() -> str:
+    return (FIXTURES / "skeptic_response.json").read_text()
+
+
+@pytest.fixture
+def fake_extractor_client(extractor_payload: str) -> FakeAnthropic:
+    return FakeAnthropic(extractor_payload)
+
+
+@pytest.fixture
+def fake_skeptic_client(skeptic_payload: str) -> FakeAnthropic:
+    return FakeAnthropic(skeptic_payload)
