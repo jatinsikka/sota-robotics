@@ -44,9 +44,15 @@ audits guard against gaming and drift.
 
 ## Status
 
-Design spec approved (`docs/2026-06-16-sota-robotics-design.md`). Implementation
-plan and scaffolding next. Brand name is a working slug, pending an originality
-check.
+All five sub-plans implemented and merged to `main` (`docs/plans/`): data
+backbone + migrations, Phase-0 backfill, live ingest spine (arXiv/HF/GitHub),
+the extractor→skeptic→gate agent pipeline, and the Next.js web views. Storage
+runs on Neon serverless Postgres (Supabase dropped). Tests green: 91 ingest
+(pytest), 40 web (vitest).
+
+**Not yet live:** no Neon project is provisioned — set `DATABASE_URL`, run
+`python -m sota_ingest.migrate`, then seed and deploy. Brand name is still a
+working slug, pending an originality check.
 
 ## Stack
 
