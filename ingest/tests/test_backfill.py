@@ -9,11 +9,8 @@ from sota_ingest.awesome_lists import AwesomeSource
 def test_run_pwc_backfill_upserts_filtered_claims(fixtures_dir, fake_db):
     data = json.loads((fixtures_dir / "pwc_robotics_tasks.json").read_text())
 
-    def fake_fetch_json(url, **kw):
-        return data
-
     writer = SotaWriter(fake_db())
-    stats = run_pwc_backfill(writer, run_id="run-1", fetch_json=fake_fetch_json, source_url="https://hf/pwc.json")
+    stats = run_pwc_backfill(writer, run_id="run-1", fetch_data=lambda: data)
 
     # VQAv2 dropped -> 2 results stored (LIBERO + Habitat ObjectNav)
     assert stats.results_upserted == 2
@@ -25,8 +22,8 @@ def test_run_pwc_backfill_upserts_filtered_claims(fixtures_dir, fake_db):
 def test_run_pwc_backfill_is_idempotent(fixtures_dir, fake_db):
     data = json.loads((fixtures_dir / "pwc_robotics_tasks.json").read_text())
     writer = SotaWriter(fake_db())
-    run_pwc_backfill(writer, "run-1", fetch_json=lambda url, **kw: data, source_url="u")
-    run_pwc_backfill(writer, "run-2", fetch_json=lambda url, **kw: data, source_url="u")
+    run_pwc_backfill(writer, "run-1", fetch_data=lambda: data)
+    run_pwc_backfill(writer, "run-2", fetch_data=lambda: data)
     assert len(writer.conn._store_rows.get("results", [])) == 2  # not 4
 
 

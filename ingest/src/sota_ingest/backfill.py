@@ -15,14 +15,9 @@ from typing import Callable
 
 from sota_ingest.awesome_lists import SOURCES, AwesomeSource, parse_awesome_markdown
 from sota_ingest.db import SotaWriter, client_from_env
-from sota_ingest.fetch import fetch_json as _fetch_json
 from sota_ingest.fetch import fetch_text as _fetch_text
+from sota_ingest.pwc_archive import fetch_pwc_archive
 from sota_ingest.pwc_backfill import claims_from_pwc
-
-# Frozen PWC archive evaluation-tables JSON (CC-BY-SA on huggingface.co/pwc-archive).
-PWC_ARCHIVE_URL = (
-    "https://huggingface.co/datasets/pwc-archive/evaluation-tables/resolve/main/evaluation-tables.json"
-)
 
 
 @dataclass
@@ -38,11 +33,11 @@ class BackfillStats:
 def run_pwc_backfill(
     writer: SotaWriter,
     run_id: str,
-    fetch_json: Callable = _fetch_json,
-    source_url: str = PWC_ARCHIVE_URL,
+    fetch_data: Callable[[], list] = fetch_pwc_archive,
 ) -> BackfillStats:
-    """Fetch frozen PWC archive -> filter robotics -> HELD claims -> upsert."""
-    data = fetch_json(source_url)
+    """Fetch frozen PWC archive (parquet shards) -> filter robotics -> HELD
+    claims -> upsert."""
+    data = fetch_data()
     claims = claims_from_pwc(data)
     stats = BackfillStats()
     for claim in claims:
